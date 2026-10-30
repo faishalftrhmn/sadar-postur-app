@@ -5,6 +5,7 @@ import mediapipe as mp
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
 import joblib
+from cv_engine import draw_posture_annotations
 
 # ==========================================
 # 1. KONFIGURASI HALAMAN & TEMA
@@ -237,13 +238,22 @@ with col_res:
                 pred = rf_model.predict(features)[0]
                 prob = rf_model.predict_proba(features)[0][pred] * 100
 
-                # Render Visualisasi pada Gambar
-                color = (40, 40, 230) if pred == 1 else (40, 180, 40) # BGR
-                pt_head = (int(head_pt.x * w), int(head_pt.y * h))
-                pt_shoulder = (int(shoulder.x * w), int(shoulder.y * h))
-                cv2.circle(frame, pt_head, 9, color, -1)
-                cv2.circle(frame, pt_shoulder, 9, color, -1)
-                cv2.line(frame, pt_head, pt_shoulder, color, 4)
+                # Render Visualisasi Garis Kerangka via cv_engine
+                annotated_image = draw_posture_annotations(
+                    frame=frame,
+                    head_pt=head_pt,
+                    shoulder=shoulder,
+                    hip=hip,
+                    hip_visible=hip_visible,
+                    pred=pred
+                )
+
+                # Tampilkan Hasil Citra Beranotasi
+                st.image(
+                    annotated_image,
+                    caption="Visualisasi Garis Kerangka & Penjajaran Biomekanik",
+                    use_container_width=True
+                )
 
                 # Tampilkan Kartu Metrik Ergonomis
                 if pred == 1:
