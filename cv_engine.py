@@ -42,7 +42,8 @@ class SadarPosturHybridEngine:
       )
       self.landmarker = vision.PoseLandmarker.create_from_options(options)
     except Exception as e:
-      print(f"[PERINGATAN] MediaPipe PoseLandmarker dilewati: {e}")
+      print(f"[PERINGATAN] MediaPipe PoseLandmarker dinonaktifkan: {e}")
+      self.landmarker = None
 
   def _calculate_angle(self, p1, p2):
     dx = p1[0] - p2[0]
@@ -108,7 +109,6 @@ class SadarPosturHybridEngine:
       pt_back_est = (pt_shoulder[0], min(h - 10, pt_shoulder[1] + 130))
       cv2.line(img_rgb, pt_shoulder, pt_back_est, line_color, 3, cv2.LINE_AA)
 
-    # Titik lingkaran sendi pada Telinga & Bahu
     for pt in [pt_head, pt_shoulder]:
       cv2.circle(img_rgb, pt, 7, joint_color, -1)
       cv2.circle(img_rgb, pt, 9, (15, 23, 42), 2)
@@ -142,22 +142,23 @@ class SadarPosturHybridEngine:
 
     detections.sort(key=lambda x: x["confidence"], reverse=True)
 
-    # 2. Ekstraksi Titik Sendi & Sudut Biomekanik (MediaPipe)
-    mp_image = mp.Image(
-        image_format=mp.ImageFormat.SRGB,
-        data=cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB),
-    )
-    pose_res = (
-        self.landmarker.detect(mp_image)
-        if self.landmarker is not None
-        else None
-    )
+    # 2. Ekstraksi Titik Sendi & Sudut Biomekanik (dengan pengaman exception)
+    pose_res = None
+    if self.landmarker is not None:
+      try:
+        mp_image = mp.Image(
+            image_format=mp.ImageFormat.SRGB,
+            data=cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB),
+        )
+        pose_res = self.landmarker.detect(mp_image)
+      except Exception as e:
+        print(f"[PERINGATAN] Inferensi MediaPipe dilewati: {e}")
+        pose_res = None
 
     biomechanics = None
     if detections:
       utama = detections[0]
 
-      # Evaluasi sudut biomekanik sebelum menggambar kotak
       if pose_res and pose_res.pose_landmarks:
         lm = pose_res.pose_landmarks[0]
         vis_left = self._get_score(lm[7]) + self._get_score(lm[11])
@@ -179,7 +180,7 @@ class SadarPosturHybridEngine:
               else neck_ang
           )
 
-          # Hybrid Decision Fusion: koreksi bias low-light YOLO jika sudut tulang belakang terbukti tegap
+          # Hybrid Decision Fusion
           if (
               utama["class_id"] == 1
               and neck_ang < 18.0
